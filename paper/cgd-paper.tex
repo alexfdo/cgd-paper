@@ -1,0 +1,952 @@
+\documentclass[11pt,a4paper]{article}
+
+% ── Encoding & language ──
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[english]{babel}
+
+% ── Math & symbols ──
+\usepackage{amsmath,amssymb,amsthm}
+
+% ── Algorithms ──
+\usepackage[ruled,vlined,linesnumbered]{algorithm2e}
+
+% ── Tables ──
+\usepackage{booktabs}
+\usepackage{array}
+
+% ── Links ──
+\usepackage[colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue]{hyperref}
+\usepackage{url}
+
+% ── Layout ──
+\usepackage[margin=2.5cm]{geometry}
+
+% ── Listings for pseudocode ──
+\usepackage{listings}
+\lstset{
+  basicstyle=\ttfamily\small,
+  breaklines=true,
+  frame=single,
+  xleftmargin=1em
+}
+
+% ── Theorems / definitions ──
+\newtheorem{definition}{Definition}
+\newtheorem{thesis}{Design Thesis}
+\newtheorem{condition}{Condition}
+
+% ── Bibliography ──
+\usepackage[numbers,sort&compress]{natbib}
+
+% ══════════════════════════════════════════
+\title{Controlled Generative Development:\\
+A Deterministic Structural Core\\
+for AI-Native Software Design}
+
+\author{Alexander Fedorenko\\
+\textit{Independent Researcher}\\
+\texttt{alex.grig.fed@gmail.com}}
+
+\date{March 2026}
+
+\begin{document}
+\maketitle
+
+% ── Abstract ──
+\begin{abstract}
+This paper proposes Controlled Generative Development (CGD), a contract-first
+framework for AI-assisted development in which the specification precedes code,
+governs generation, and outlives code as the canonical artifact.  The central
+object of CGD is the formal triple $T = \langle Y, G, \Sigma \rangle$, where
+$Y$ is expressed through YASF, a minimal authoring layer in controlled natural
+language, $G$ is a typed directed graph of functions and tables, and $\Sigma$
+is a set of table signatures.  The paper formalizes the six-component function
+contract, subgraph contract computation, decomposition and aggregation rules,
+task-driven context assembly, and verification-driven dialogue.  CGD is
+positioned as a contract-first approach between prompt-first, workflow-first,
+spec-first, and formal-first traditions.  Using an end-to-end user registration
+case, we show that substantial structural defects can be detected and resolved
+before code generation, and that specification closure arises as a state of the
+entire multi-level loop rather than of any single layer.  The paper is
+intentionally framed as conceptual and architectural: the formal core is defined
+here, while the reference implementation and empirical validation are placed on
+the immediate roadmap.
+\end{abstract}
+
+\medskip
+\noindent\textbf{Keywords:}
+controlled generative development;
+contract-first development;
+AI-native software design;
+typed dependency graphs;
+specification closure;
+verification-driven dialogue;
+task-driven context assembly
+
+\bigskip
+
+% ══════════════════════════════════════════
+\section{Introduction}\label{sec:intro}
+
+Generative AI has sharply reduced the cost of writing code, but it has not
+solved the more fundamental problem: how to preserve the causal link between
+the author's original intent, the structure of the system, and the generated
+implementation.  In most practical scenarios, an LLM receives either a
+free-form prompt or weakly structured context and then produces code that is
+verified only after the fact: by tests, manual review, or operation in
+production.  This means that structural defects are detected too late---after
+they have already been embodied in code, dependencies, and data~\cite{dakhel2023copilot,jiang2024survey}.
+
+In this paper we propose \textbf{Controlled Generative Development (CGD)}, an
+approach in which the specification precedes code, guides generation, and
+outlives code as the canonical artifact.  The central object of CGD is the
+formal triple
+
+\[
+  T = \langle Y,\; G,\; \Sigma \rangle,
+\]
+where $Y$ is a YASF specification in controlled natural language, $G$ is a
+typed directed graph of functions and tables, and $\Sigma$ is a set of table
+signatures.  The triple is treated not as documentation but as a compilable
+and verifiable project invariant: changes in one component either cascade
+consistently into the others or are flagged by the verifier as a mismatch.
+
+CGD does not claim the status of a main-track empirical paper with already
+demonstrated industrial effectiveness.  This is a conceptual and architectural
+paper with a formal core, explicit limitations, and a roadmap toward a
+reference implementation.  We deliberately do not claim strong operational
+metrics here.  Instead, the paper answers an earlier and more foundational
+question: what should the minimal formal layer look like if AI-assisted
+development is to become structurally controllable before code is generated?
+
+The main contributions of the paper are as follows.
+\begin{enumerate}
+  \item We introduce CGD as a distinct \textbf{contract-first} framework
+        situated between prompt-first, workflow-first, spec-first, and
+        formal-first approaches.
+  \item We define YASF as a minimal authoring format for specification and,
+        at the same time, as a potential intermediate representation for
+        larger systems.
+  \item We specify the graph model
+        $G = (V, E, \mathrm{src}, \mathrm{dst}, \tau_V, \tau_E)$ with two
+        node types, five edge types, and the six-component function contract
+        $C(f) = \langle C_{in}, C_{out}, R, W, T_{in}, T_{out} \rangle$.
+  \item We formalize subgraph decomposition and aggregation with a computable
+        correctness condition via \textsc{ComputeSubgraphContract} and
+        \texttt{refinement\_map}.
+  \item We define \textbf{task-driven context assembly} as a deterministic
+        function of the contractual neighborhood of the target node.
+  \item We close the cycle through \textbf{contract-driven generation} and
+        \textbf{reverse verification}, while explicitly distinguishing what
+        is already formalized from what remains on the roadmap.
+  \item We demonstrate the pre-generation part of the cycle on a single
+        end-to-end user registration case in five examples.
+  \item We introduce \textbf{verification-driven dialogue} as an
+        infrastructural loop in which the verifier not only finds defects
+        but also generates targeted questions for the user until
+        specification closure is reached.
+\end{enumerate}
+
+
+% ══════════════════════════════════════════
+\section{Existing Approaches to AI-Assisted Development}\label{sec:related}
+
+\subsection{Classification of approaches}\label{sec:classification}
+
+Existing approaches to AI-assisted development can be usefully classified
+along two axes: the degree of specification formalization and the point at
+which verification takes place.  For the purposes of this paper we distinguish
+\textbf{five} categories.
+
+\paragraph{Prompt-first.}
+The developer formulates the task in free form and the LLM generates code.
+There is no independent specification artifact; the prompt is ephemeral and
+poorly reproducible.  Verification is entirely
+post-generative~\cite{dakhel2023copilot,cursor2024}.
+
+\paragraph{Workflow-first.}
+Generation is organized as a sequence of roles, agents, or stages.  The
+process becomes more structured, but the data, dependencies, and contracts are
+still passed as text between steps.  Verification is still aimed at the result
+rather than at a formal model of the
+system~\cite{qian2024chatdev,hong2024metagpt,wu2023autogen}.
+
+\paragraph{Spec-first.}
+The specification becomes the primary artifact: the developer maintains a
+structured text from which code and tests are generated.  This is a major step
+forward because intent is separated from implementation.  However, the
+architecture usually remains single-level: ``specification $\to$ generation
+$\to$ tests $\to$ revise the specification.''  The closest industrial example
+to our work is \textbf{CodeSpeak}: textual \texttt{.cs.md} specs, code
+generation, mixed mode, and takeover for legacy code.  This class of tools
+confirms that there is already industrial demand for specification-first
+practice~\cite{breslav2026codespeak,habr2026codespeak,microsoft2023typechat,orosz2026kotlin}.
+
+\paragraph{Formal-first.}
+The system is described in a formal language with mathematical
+semantics---TLA+, Alloy, Lean, Z, VDM, and similar systems.  The guarantees
+are maximal, but the cost of entry is high, and direct integration with
+LLM-based code generation is usually not the primary
+goal~\cite{lamport2002tla,jackson2012alloy}.
+
+\paragraph{Contract-first (CGD).}
+The developer writes in the minimal YASF format, which is deterministically
+mapped into the triple $T = \langle Y, G, \Sigma \rangle$.  Structural and
+contractual verification is performed \textbf{before} code generation.  The
+LLM context is assembled from the formal neighborhood of a node rather than
+from a global bag of text.  The architecture is multi-level: different classes
+of defects are filtered at different infrastructure levels.
+
+\subsection{Evolutionary axis}\label{sec:evolution}
+
+These categories form a working evolutionary axis in terms of increasing
+formalization and depth of control:
+
+\medskip
+\centerline{\textbf{Prompt-first $\to$ Workflow-first $\to$ Spec-first $\to$
+Contract-first (CGD).}}
+\medskip
+
+\noindent
+At each step a new stable layer appears.  Workflow-first adds process
+structure.  Spec-first introduces the specification as an explicit artifact.
+Contract-first adds a formal system model and pre-generative verification.
+Formal-first sits at the same end of the spectrum in terms of rigor, but
+forms a parallel branch: it is not the next evolutionary step of LLM-native
+development, but a separate tradition with a different balance between
+guarantees and entry
+cost~\cite{qian2024chatdev,hong2024metagpt,wu2023autogen,lamport2002tla,jackson2012alloy,meyer1997oosc,evans2003ddd}.
+
+\subsection{CodeSpeak as the closest industrial analogue}\label{sec:codespeak}
+
+CodeSpeak matters for this paper not as a competitor, but as evidence of
+engineering demand.  It shows that a spec-first cycle based on \texttt{.cs.md}
+specifications, generation, mixed mode, and takeover is already perceived as a
+practical alternative to direct code editing.  CGD, however, operates one level
+deeper: it introduces a formal multi-level scaffold in which the specification
+is not only an input to the generator, but also an object of structural
+verification before code
+exists~\cite{breslav2026codespeak,habr2026codespeak,orosz2026kotlin}.
+
+In CGD terms, CodeSpeak primarily covers the authoring-specification level and
+part of the generation level, but it does not explicitly introduce a separate
+graph layer, a separate contract-and-signature layer, or verification-driven
+dialogue as an infrastructural loop.  CGD is aimed precisely at this vacant
+niche~\cite{breslav2026codespeak,habr2026codespeak,orosz2026kotlin}.
+
+
+% ══════════════════════════════════════════
+\section{Controlled Generative Development}\label{sec:cgd}
+
+\subsection{The triple as an invariant}\label{sec:triple}
+
+The central artifact of CGD is the triple $T = \langle Y, G, \Sigma \rangle$,
+where $Y$ captures the semantic dimension of the specification, $G$ its
+structural dimension, and $\Sigma$ its typological dimension.  These three
+dimensions are not strictly orthogonal: $Y$ compiles into $G$, the graph
+refers to $\Sigma$, and $\Sigma$ constrains the admissible links in $G$.
+Nevertheless, they form three distinguishable coordinate axes of description,
+sufficiently independent to serve as a working basis for design.
+
+\begin{thesis}[Sufficiency of the triple]\label{thesis:triple}
+For the class of information systems with discrete data flows, the triple
+$\langle Y, G, \Sigma \rangle$ is sufficient to express and verify those
+aspects of a system that concern the structural organization of functions,
+data flows, and contractual compatibility.  Full formal and empirical
+validation of this hypothesis remains future work.
+\end{thesis}
+
+The determinism of compilation from YASF into graph and signatures is likewise
+stated as an \textbf{implementation invariant}, to be checked by conformance
+tests, rather than as an already established empirical fact.
+
+\subsection{Task-driven context assembly}\label{sec:context}
+
+The traditional way of working with LLMs looks like ``collect as much context
+as possible, compress it, and hope the model uses exactly what matters.''
+This strategy systematically creates two extremes: \emph{context pollution}
+and \emph{context loss}~\cite{lewis2020rag}.
+
+CGD replaces this pattern with \textbf{task-driven context assembly}.  For a
+target function $f$, the context is defined not by dialogue history and not by
+an arbitrary RAG set, but by the formal neighborhood of its contract.  In the
+basic case, the context includes:
+\begin{itemize}
+  \item the full contract $C(f)$;
+  \item the signatures of all tables in $C_{in}(f)$, $C_{out}(f)$, $R(f)$,
+        $W(f)$;
+  \item the contracts of first-order functions connected to $f$ through
+        $T_{in}(f)$ and $T_{out}(f)$;
+  \item when necessary, the signatures of tables jointly used with first-order
+        neighbors.
+\end{itemize}
+
+The context therefore becomes a deterministic function of the node and its
+contractual neighborhood.  It is local, reproducible, and independent of how
+exactly the developer or agent happened to describe the project in earlier
+interactions.
+
+\subsection{Contract-driven generation, reverse verification, and the sterile
+zone}\label{sec:sterile}
+
+Once specification closure has been reached, the code generator receives not a
+free textual description but a strict technical assignment derived from the
+contract and signatures.  The contract fixes inputs, outputs, reads, writes,
+and triggers.  The table signatures fix fields, keys, kind, and constraints.
+This constrains the space of admissible implementations before the first token
+of code is generated.
+
+Generation itself remains non-deterministic: the model may choose different
+algorithms, styles, and code structures.  But any implementation is then
+compared not with the original prompt, but with the canonical triple.
+
+This is also where the principle of the \textbf{sterile zone} is introduced.
+In CGD a project is considered structurally sterile as long as unambiguous
+traceability and reverse verifiability are preserved between $Y$, $G$,
+$\Sigma$, and code.  Manual edits to generated code are treated as violations
+of sterility.  Classical round-trip engineering is deliberately rejected as
+the default process model.  If legacy or handwritten code must be included in
+the system, it goes through an \textbf{assimilation} procedure:
+decomposition, extraction of the actual triple $T'$, reconstruction of YASF,
+and renewed achievement of closure~\cite{breslav2026codespeak}.
+
+\subsection{Verification-driven dialogue}\label{sec:dialogue}
+
+Verification-driven dialogue turns specification building from a monologue by
+the author into a controlled cycle:
+
+\medskip
+\centerline{\textbf{build the triple $\to$ verify $\to$ classify defects
+$\to$ ask the user $\to$ refine the triple $\to$ repeat.}}
+\medskip
+
+\noindent
+The verifier splits defects into three classes.
+\begin{itemize}
+  \item \textbf{Blocking} --- defects that cannot be resolved correctly
+        without a user decision.
+  \item \textbf{Auto-resolvable} --- only safe normalizations that do not
+        alter domain semantics: canonicalization of names, aliases,
+        enum/PK/FK, kind, sections, and duplicate edges.
+  \item \textbf{Advisory} --- warnings that may require a human decision but
+        do not block progress of the cycle itself.
+\end{itemize}
+
+Specification closure is therefore not a property of a single level and not a
+synonym for ``the graph passed L2.''  It is a state of the whole loop,
+reached after the blocking queue is empty and all user decisions have cascaded
+downward through the specification.
+
+\subsection{Multi-level CGD infrastructure}\label{sec:levels}
+
+\subsubsection{Strategic principle}\label{sec:strategy}
+
+The strategic principle of CGD is simple: \textbf{make the infrastructure more
+complex, not the author}.  The author should work with a minimal and naturally
+readable representation.  Everything related to formal rigor, contractual
+algebra, graph checking, and context assembly is shifted into the
+infrastructural layer.
+
+\subsubsection{Five processing levels}\label{sec:five-levels}
+
+CGD uses five levels.
+
+\paragraph{L0 --- user / interface.}
+At this level there is only intent, expressed in free natural language.
+
+\paragraph{L1 --- authoring / YASF.}
+At this level a partial triple $T_1 = \langle Y, -, - \rangle$ appears: a
+structured YASF block with a canonical subset of sections.
+
+\paragraph{L2 --- structural / graph.}
+Here $T_2 = \langle Y, G, - \rangle$ appears: YASF compiles into a typed
+graph.  Structural defects are filtered out---illegal edges, isolated nodes,
+duplicates, broken flows, and missing mandatory paths.
+
+\paragraph{L3 --- contractual / signatures.}
+At this level the full triple $T_3 = \langle Y, G, \Sigma \rangle$ is
+formed.  Signature compatibility, PK/FK integrity, kind, enum compatibility,
+and contract completeness are checked.
+
+\paragraph{L4 --- generation + reverse verification.}
+The canonical triple is used for generation and then for reverse checking of
+the actual triple $T'$ extracted from code.
+
+\subsubsection{Layered defect filtering and specification
+closure}\label{sec:closure}
+
+Each level filters its own class of defects and thereby reduces the burden on
+the next one.  A problem caught at L2 should not survive until L4.  This is
+why closure is formulated as a state of the whole infrastructural loop.
+
+In this paper \textbf{specification closure} is considered achieved when the
+following five conditions hold simultaneously:
+
+\begin{enumerate}
+  \item all structural checks are green;
+  \item there are no unresolved references, signatures, or aliases;
+  \item all contracts are closed;
+  \item all mandatory paths terminate in an external effect;
+  \item the blocking-defect queue is empty.
+\end{enumerate}
+
+\subsubsection{Event routing: downward cascade and upward
+escalation}\label{sec:cascade}
+
+CGD uses two complementary trajectories.
+
+\textbf{Downward cascade}: L0 $\to$ L1 $\to$ L2 $\to$ L3 $\to$ L4.  Intent
+is progressively formalized.
+
+\textbf{Upward escalation}: if L2 or L3 detects a blocking defect, it is
+raised to L0 as a targeted question to the user; the answer then cascades
+back down through a YASF update, graph recompilation, and contract
+recomputation.
+
+\subsubsection{Comparison with single-level
+approaches}\label{sec:single-level}
+
+Single-level spec-first tools mix semantic incompleteness, structural defects,
+contractual mismatches, and generator errors within one
+loop~\cite{breslav2026codespeak}.  CGD separates these causes across
+responsibility levels.  As a result, every defect receives an address: where
+it arose, where it must be resolved, and how the consequences of the
+resolution cascade.
+
+\subsubsection{The triple as a working basis of the specification
+space}\label{sec:basis}
+
+The triple $\langle Y, G, \Sigma \rangle$ defines three distinguishable
+dimensions of the specification space:
+\begin{itemize}
+  \item $Y$ covers intent, processing rules, and branching conditions;
+  \item $G$ covers the topology of functions and data flows;
+  \item $\Sigma$ covers table typing and integrity constraints.
+\end{itemize}
+
+We treat this triple as a \textbf{working basis} and a constructive design
+thesis~\cite{meyer1997oosc,chen2023kgse}.  This makes it possible to
+interpret the CGD levels as different projections of the same formal space and
+makes the architecture extensible: a new level can be added without revising
+the basis, provided that a mapping from the space $T$ is defined for
+it~\cite{lamport2002tla,jackson2012alloy}.
+
+The extensibility principle has a practical integration consequence.  Any
+external tool---a code generator, linter, CI/CD pipeline, documentation
+generator, or cross-project analyzer---can be integrated into CGD as an
+additional level, provided that it defines its own mapping from the space $T$.
+The triple $T = \langle Y, G, \Sigma \rangle$ serves as a common formal
+integration interface: tools connect through a formal projection contract
+rather than through an ad hoc API.  In this sense, CGD is an integration
+platform, not an alternative to existing development tools.
+
+\subsubsection{Representation of control
+structures}\label{sec:control-flow}
+
+Control flow is covered by the triple \emph{representationally}, not in full
+operational semantics.
+
+\begin{itemize}
+  \item In $Y$, branching, loops, and parallelism are described in the
+        Processing section in controlled natural language.
+  \item In $G$, these structures become topology: success-path and
+        error-path, back-edges for loops, and independent branches for
+        parallelism.
+  \item In $\Sigma$, the data traveling along these paths are typed.
+\end{itemize}
+
+What remains outside the current formalization are the exact
+branch-selection rules, execution policies for loops, priorities of parallel
+branches, timing, and transactionality.  This is deliberately deferred to
+the limitations section.
+
+
+% ══════════════════════════════════════════
+\section{Formal Core}\label{sec:formal}
+
+\subsection{YASF}\label{sec:yasf}
+
+\textbf{YASF (Yet Another Specification Format)} is the minimal authoring
+layer of specification in controlled natural language.  For the purposes of
+this paper, we use a \textbf{canonical subset of sections} sufficient to
+derive the graph and contracts: purpose, input data, reference data,
+processing, output data, errors, side effects, triggers, and contract.
+
+It is important not to overstate the status of the format.  YASF is not
+presented here as a forever fixed set of sections.  For larger systems it may
+serve not only as something written by a human, but also as an internal
+\textbf{IR} generated by tooling.  What remains invariant is not the origin
+of YASF, but its role as the semantic input to the triple.
+
+Compilation $\text{YASF} \to (G, \Sigma)$ is treated as a deterministic
+implementation goal and should be checked by conformance tests.
+
+\subsection{Graph model and contracts}\label{sec:graph}
+
+The graph is defined as
+
+\[
+  G = (V,\; E,\; \mathrm{src},\; \mathrm{dst},\; \tau_V,\; \tau_E),
+\]
+where $\tau_V(v) \in \{\texttt{function},\; \texttt{table}\}$, and
+$\tau_E(e) \in \{\texttt{consumes},\; \texttt{produces},\;
+\texttt{reads},\; \texttt{writes},\; \texttt{triggers}\}$.
+
+In the current synchronized version of the paper, edge types are defined as
+follows:
+\begin{itemize}
+  \item \texttt{consumes}: table $\to$ function
+  \item \texttt{produces}: function $\to$ table
+  \item \texttt{reads}: table $\to$ function
+  \item \texttt{writes}: function $\to$ table
+  \item \texttt{triggers}: function $\to$ function
+\end{itemize}
+
+Table $\to$ table links are forbidden.  Function $\to$ function links are
+permitted only for \texttt{triggers}.  Triggers to tables are forbidden.
+
+For each function $f$, the contract is defined as
+
+\[
+  C(f) = \langle C_{in},\; C_{out},\; R,\; W,\; T_{in},\; T_{out} \rangle,
+\]
+where all components are derived directly from the
+graph~\cite{meyer1997oosc}.
+
+\subsubsection{Subgraph and boundary}\label{sec:subgraph}
+
+Let $V_{\text{func}}(S) \subseteq V$ be a chosen set of functions.  Then
+define the set of subgraph tables as
+
+\[
+  V_{\text{tables}}(S) = \bigl\{ t \in V \;\big|\;
+  \tau_V(t)=\texttt{table} \text{ and } t \text{ is incident to at least one
+  edge connected to a function from } V_{\text{func}}(S) \bigr\}.
+\]
+
+Then:
+\begin{itemize}
+  \item $V(S) = V_{\text{func}}(S) \cup V_{\text{tables}}(S)$;
+  \item $E(S) = \bigl\{ e \in E \;\big|\;
+        \mathrm{src}(e) \in V(S) \text{ and } \mathrm{dst}(e) \in V(S)
+        \bigr\}$.
+\end{itemize}
+
+A table is considered internal if all its incident edges connect it only to
+functions from $V_{\text{func}}(S)$.  The remaining tables form the boundary
+$\partial S$.
+
+\subsubsection{\textsc{ComputeSubgraphContract}}\label{sec:compute}
+
+\begin{lstlisting}
+function ComputeSubgraphContract(S):
+    Vfunc = V_func(S)
+    Vtabs = V_tables(S)
+
+    Internal = { t in Vtabs |
+                 every edge incident to t
+                 is incident only to functions in Vfunc }
+    Boundary = Vtabs - Internal
+
+    Cin(S)  = { t in Boundary |
+                exists consumes edge  t -> f, f in Vfunc }
+    Cout(S) = { t in Boundary |
+                exists produces edge f -> t, f in Vfunc }
+    R(S)    = { t in Boundary |
+                exists reads edge    t -> f, f in Vfunc }
+    W(S)    = { t in Boundary |
+                exists writes edge   f -> t, f in Vfunc }
+    Tin(S)  = { g not in Vfunc |
+                exists trigger g -> f, f in Vfunc }
+    Tout(S) = { g not in Vfunc |
+                exists trigger f -> g, f in Vfunc }
+
+    return <Cin(S), Cout(S), R(S), W(S), Tin(S), Tout(S)>
+\end{lstlisting}
+
+This definition is consistent with the examples: external tables are present
+in $V(S)$ as boundary tables, and the subgraph contract is computed precisely
+from them rather than from abstract ``interface tables'' outside the induced
+subgraph.
+
+\subsubsection{Decomposition and aggregation}\label{sec:decomp}
+
+A function $f$ may be replaced with a subgraph $S$ if three conditions hold:
+\begin{enumerate}
+  \item $S$ is induced by its $V(S)$;
+  \item all external links pass only through $\partial S$ and the trigger
+        boundary;
+  \item the external contract, after applying the
+        internalization/externalization rule, is preserved: $C(S) = C(f)$.
+\end{enumerate}
+
+One clarification is needed here.  If a function $g \in T_{out}(f)$ is
+included inside the subgraph, \textbf{trigger internalization} occurs: $g$ is
+removed from $T_{out}(S)$, and its boundary outputs become part of
+$C_{out}(S)$.  Aggregation performs the inverse
+operation---\textbf{externalization}.  Thus the reversibility of
+decompose/aggregate becomes parameterized by the subgraph boundary, but is
+not broken.
+
+Aggregation is admissible if the subgraph is collapsed into a node $f_S$ with
+the same external contract and is accompanied by a \texttt{refinement\_map}
+sufficient to recover the internal structure exactly.
+
+\subsection{Table signatures and compatibility}\label{sec:signatures}
+
+For each table $t$, the signature is defined as
+
+\[
+  \Sigma(t) = \langle \text{Fields},\; \text{Keys},\;
+  \text{Kind},\; \text{Constraints} \rangle.
+\]
+
+In the current JSON profile, fields are typed by base types such as
+\texttt{string}, \texttt{integer}, \texttt{boolean}, \texttt{float},
+\texttt{timestamp}, \texttt{date}, \texttt{uuid}, \texttt{text}, and
+\texttt{json}; enum and regex constraints are expressed via
+\texttt{Constraints}.  The attribute \texttt{role} may be present as an
+auxiliary semantic hint, but in the current version it \textbf{does not
+participate in formal compatibility}.
+
+The canonical kinds in the synchronized version are \textbf{entity, event,
+reference, log, projection, error}.  For the purposes of the current version,
+every table, including \texttt{projection}, is required to have a canonical PK
+or an explicit surrogate key; this removes the contradiction between
+representation semantics and serialization rules.
+
+Signature compatibility is checked after canonicalization.  It is convenient
+to distinguish \textbf{strict equality} $\Sigma(A) = \Sigma(B)$ from
+\textbf{inclusion compatibility} $\Sigma(A) \supseteq \Sigma(B)$.  It is
+important to state the direction of the enum rule explicitly.  If a producer
+function emits a table that is then interpreted by a consumer function, then
+for every enum field the following must hold:
+
+\[
+  \text{Allowed}(\text{producer}) \subseteq \text{Allowed}(\text{consumer}).
+\]
+Otherwise the producer may generate a value that the consumer cannot
+interpret, which is an L3 defect.
+
+In the current version of the paper, per-consumer field contracts are
+\textbf{not formalized}: a function operates on a table as a whole object,
+rather than on a formally specified projection of its fields.
+
+
+% ══════════════════════════════════════════
+\section{End-to-End Case: User Registration}\label{sec:case}
+
+\subsection{Example 1 --- Birth of the triple}\label{sec:ex1}
+
+From the request ``register a user by email, persist the record, send a
+confirmation, and log the event,'' the following base tables are extracted:
+\textbf{RegistrationRequest}, \textbf{User}, \textbf{RegistrationEvent},
+\textbf{AuditLog}, \textbf{NotificationEvent}; and two functions:
+\textbf{RegisterUser} and \textbf{SendConfirmation}.
+
+Top-level contract:
+
+\[
+  C(\text{RegisterUser}) = \langle
+  \{\text{RegistrationRequest}\},\;
+  \{\text{User},\, \text{RegistrationEvent}\},\;
+  \{\text{User}\},\;
+  \{\text{AuditLog}\},\;
+  \emptyset,\;
+  \{\text{SendConfirmation}\}
+  \rangle.
+\]
+
+Trigger-function contract:
+
+\[
+  C(\text{SendConfirmation}) = \langle
+  \{\text{User}\},\;
+  \{\text{NotificationEvent}\},\;
+  \emptyset,\;
+  \emptyset,\;
+  \{\text{RegisterUser}\},\;
+  \emptyset
+  \rangle.
+\]
+
+The graph contains \textbf{2~functions, 5~tables, and 8~edges}.
+
+\subsection{Example 2 --- Decomposition}\label{sec:ex2}
+
+The function \textbf{RegisterUser} is decomposed into
+\textbf{ValidateInput}, \textbf{CheckUniqueness}, \textbf{CreateUser}, and
+\textbf{SendConfirmation}.  Two intermediate tables appear inside the
+subgraph: \textbf{ValidatedRequest} and \textbf{UniqueRequest}.
+
+Applying \textsc{ComputeSubgraphContract} yields:
+
+\[
+  C(S) = \langle
+  \{\text{RegistrationRequest}\},\;
+  \{\text{User},\, \text{RegistrationEvent},\, \text{NotificationEvent}\},\;
+  \{\text{User}\},\;
+  \{\text{AuditLog}\},\;
+  \emptyset,\;
+  \emptyset
+  \rangle.
+\]
+
+This is consistent with the internalization rule:
+\textbf{SendConfirmation} has moved inside the subgraph, so it disappears
+from $T_{out}(S)$, while its boundary output \textbf{NotificationEvent}
+appears in $C_{out}(S)$.
+
+At this point closure is still not reached: the success path is formalized,
+but the error path is missing.  The subgraph contains
+\textbf{4~functions, 7~tables, and 12~edges}.
+
+\subsection{Example 3 --- Defect detection and repair}\label{sec:ex3}
+
+At this step the verifier finds \textbf{2~blocking and 2~advisory} defects.
+
+\textbf{Blocking~1.}  \textbf{ValidateInput} has no error path.
+
+\textbf{Blocking~2.}  \textbf{CheckUniqueness} has no error path.
+
+After two targeted questions, the user chooses a unified behavior: in both
+cases the function produces \textbf{RegistrationError}.
+
+\textbf{Advisory~1.}  There is no write into \textbf{AuditLog} on the error
+path.  This is not an auto-resolvable case: the decision depends on the
+business audit policy.  In the running case, the user decides \textbf{to add}
+AuditLog writes for the error path.
+
+\textbf{Advisory~2.}  \textbf{RegistrationEvent} has no consumer inside the
+current graph.  The user explicitly states that the event is consumed by
+external analytics.
+
+After the update, the subfunction contracts become closed, and the top-level
+contract is refined to version~\textbf{v2}:
+
+\[
+  C(\text{RegisterUser}) = \langle
+  \{\text{RegistrationRequest}\},\;
+  \{\text{User},\, \text{RegistrationEvent},\, \text{RegistrationError}\},\;
+  \{\text{User}\},\;
+  \{\text{AuditLog}\},\;
+  \emptyset,\;
+  \{\text{SendConfirmation}\}
+  \rangle.
+\]
+
+Specification closure is reached here, not at the decomposition step.  The
+subgraph now contains \textbf{4~functions, 8~tables, and 16~edges}.
+
+\subsection{Example 4 --- Aggregation}\label{sec:ex4}
+
+The repaired subgraph is collapsed back into the single node
+\textbf{RegisterUser}.  During aggregation, the inverse trigger
+externalization occurs: \textbf{SendConfirmation} once again becomes an
+external function in $T_{out}(\text{RegisterUser})$, and
+\textbf{NotificationEvent} moves back into \textbf{SendConfirmation}'s
+contract.
+
+The external contract of the aggregated node matches~\textbf{v2}.  The
+\texttt{refinement\_map} preserves the internal functions, intermediate
+tables, and internal edges.
+
+It is important here to distinguish two levels of reversibility.  At the
+topology level, the transformation decompose/aggregate is reversible.  At
+the level of contract component distribution, reversibility is
+\textbf{parameterized by the subgraph boundary}: an internalized trigger
+moves its outputs into $C_{out}(S)$, and an externalized trigger returns
+them to the child function.  This is not a side effect of an informal
+heuristic, but part of the transformation rule itself.
+
+After aggregation, the graph contains \textbf{2~functions, 6~tables, and
+9~edges}, while closure is preserved.
+
+\subsection{Example 5 --- Model comparison, normalization, and convergence
+to the project canon}\label{sec:ex5}
+
+The same request is sent to two models.
+\begin{itemize}
+  \item \textbf{Model~A} returns a simplified graph with names such as
+        \texttt{InputForm}, \texttt{UserRecord}, and \texttt{EmailLog},
+        without PK/kind and without an error path.
+  \item \textbf{Model~B} returns a more detailed structure with
+        \texttt{RegistrationRequest}, \texttt{Users},
+        \texttt{Notification}, and \texttt{AuditLog}, but still without
+        \texttt{RegistrationError} and \texttt{RegistrationEvent}.
+\end{itemize}
+
+Comparison is performed in three layers.
+\begin{enumerate}
+  \item \textbf{Overall topology.}  Both models reproduce the success path
+        ``input $\to$ processing $\to$ user creation $\to$ notification.''
+  \item \textbf{Structural differences.}  Names, signature completeness, and
+        the presence of reads/writes differ.
+  \item \textbf{Deviations from the project canon.}  Both models lack the
+        error path and \texttt{RegistrationEvent}; Model~A is additionally
+        structurally incomplete.
+\end{enumerate}
+
+Normalization does not mean that the models ``converge by themselves.''  On
+the contrary, triples are extracted from both outputs, discrepancies are
+classified, and then both are normalized against the \textbf{project
+reference model} from Examples~1--4.  The canonical result matches the
+\textbf{v2}~contract.
+
+After normalization, the graph has \textbf{2~functions, 6~tables, and
+9~edges}.
+
+\subsection{Quantitative summary}\label{sec:quant}
+
+All numbers in this section are \textbf{illustrative}, not benchmark data.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}lccc@{}}
+\toprule
+\textbf{Example} & \textbf{Functions} & \textbf{Tables} & \textbf{Edges} \\
+\midrule
+1 --- Birth        & 2 & 5 & 8  \\
+2 --- Decomposition & 4 & 7 & 12 \\
+3 --- Defect repair & 4 & 8 & 16 \\
+4 --- Aggregation   & 2 & 6 & 9  \\
+5 --- Normalization & 2 & 6 & 9  \\
+\bottomrule
+\end{tabular}
+\caption{Graph metrics across the five running examples.}
+\label{tab:metrics}
+\end{table}
+
+In terms of defects, the case yields \textbf{2~blocking + 2~advisory}
+defects and one iteration of verification-driven dialogue before closure is
+reached.  For the function \textbf{CheckUniqueness}, task-driven context
+assembly reduces local context by approximately \textbf{65\%} relative to the
+full graph; this number is illustrative and is not presented as a general
+empirical metric.
+
+
+% ══════════════════════════════════════════
+\section{Verification Without Code}\label{sec:verification}
+
+\subsection{Pre-generative verification}\label{sec:pregen}
+
+Before code generation, the following are checked:
+\begin{itemize}
+  \item type correctness of edges;
+  \item uniqueness of identifiers and absence of duplicates;
+  \item absence of isolated nodes;
+  \item presence of PK and kind for every table;
+  \item consistency of contracts with the graph;
+  \item completeness of mandatory paths;
+  \item canonicality of signatures and contractual compatibility.
+\end{itemize}
+
+The key effect of CGD is that a significant part of architectural defects
+becomes observable \textbf{before} code exists.
+
+\subsection{Post-generative verification}\label{sec:postgen}
+
+The post-generative part of the cycle is specified in this paper as a formal
+roadmap rather than as a completed reference implementation.  The actual
+triple $T'$ is to be extracted from code, after which $T'$ is compared with
+the canonical~$T$.
+
+Some such discrepancies can be extracted strictly: extra dependencies, missing
+outputs, extra writes, altered signatures.  Some remain analytical: hidden
+logic, non-formalized path assumptions, or unused fields in the absence of
+per-consumer field contracts.
+
+
+% ══════════════════════════════════════════
+\section{Limitations and Roadmap}\label{sec:limits}
+
+\subsection{Current limitations}\label{sec:current-limits}
+
+The current version does not
+support~\cite{lamport2002tla,evans2003ddd,chen2023kgse}:
+\begin{itemize}
+  \item per-consumer field contracts;
+  \item path assumptions as a formal contract component;
+  \item contract subtyping;
+  \item developed operational semantics for loops and parallelism;
+  \item concurrent access and temporal annotations;
+  \item schema migrations and a full-fledged runtime-monitoring layer.
+\end{itemize}
+
+\subsection{Implementation status}\label{sec:impl-status}
+
+At the time of this paper, YASF, graph~v0.3, tables~v0.2, JSON
+representations, and the running case are formally defined.  A reference
+implementation of the validator, compiler, and reverse verification is not yet
+claimed as a production-ready system.  This boundary is drawn consciously and
+explicitly.
+
+\subsection{Near-term steps}\label{sec:roadmap}
+
+The roadmap includes:
+\begin{itemize}
+  \item a reference implementation of the YASF $\to$ JSON-artifact compiler;
+  \item a structural + contract consistency validator;
+  \item a task-driven context generator;
+  \item a reverse verification prototype;
+  \item case expansion beyond the user-registration scenario;
+  \item controlled evaluation on several real projects.
+\end{itemize}
+
+\subsection{Threats to validity}\label{sec:threats}
+
+\textbf{Construct validity.}  The notions of structural defect, closure, and
+contractual compatibility are introduced by the authors and may fail to cover
+all practical error classes.
+
+\textbf{Internal validity.}  The running case is synthetic and small.  It
+tests internal consistency of the model, not industrial performance.
+
+\textbf{External validity.}  Transferability to domains with complex
+concurrency, temporal logic, and rich state semantics has not yet been
+demonstrated.
+
+\textbf{Reliability.}  The quality of verification-driven dialogue depends
+not only on the formal model, but also on how well the infrastructure turns a
+defect into a clear and targeted question for the
+user~\cite{evans2003ddd,jiang2024survey}.
+
+
+% ══════════════════════════════════════════
+\section{Conclusion}\label{sec:conclusion}
+
+CGD offers not just another prompt template and not just another workflow
+around an LLM, but an earlier control layer---a layer at which the
+specification exists as a formal and verifiable invariant even before code is
+written~\cite{jackson2012alloy}.
+
+The central result of the paper is the construction
+$T = \langle Y, G, \Sigma \rangle$ together with the associated multi-level
+infrastructure L0--L4.  This infrastructure makes it possible to filter
+defects layer by layer, assemble task-oriented context from the contractual
+neighborhood, keep the project inside the sterile zone, and avoid delegating
+to the code generator those architectural decisions that should have been made
+earlier.  The architecture is open to extension: new levels and external tools
+can be connected through a formal projection contract, turning CGD into an
+integration platform.
+
+We deliberately state the completeness of the triple and the sufficiency of
+its basis as a \textbf{design thesis}, not as an already proven mathematical
+fact.  The immediate next step is a reference implementation and controlled
+empirical validation.  Even in its current form, however, CGD defines a clean
+architectural framework: the specification should precede code, govern
+generation, and outlive code as the canonical artifact.
+
+
+% ── Bibliography ──
+\bigskip
+\noindent\textbf{Supplementary materials.}
+Appendices, JSON schemas, and examples are available at
+\url{https://github.com/alexfdo/cgd-paper}.
+
+
+\bibliographystyle{plainnat}
+\bibliography{references}
+
+\end{document}
