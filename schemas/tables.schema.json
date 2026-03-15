@@ -1,0 +1,153 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CGD Tables v0.2",
+  "description": "Table signatures with fields, keys, kind, and constraints",
+  "type": "object",
+  "required": ["version", "tables"],
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "0.2"
+    },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "project": { "type": "string" },
+        "created_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "tables": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/table" },
+      "minItems": 1
+    }
+  },
+  "definitions": {
+    "table": {
+      "type": "object",
+      "required": ["id", "name", "kind", "fields", "keys"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier, matches signature_ref in graph.json"
+        },
+        "name": {
+          "type": "string",
+          "description": "Human-readable table name"
+        },
+        "kind": {
+          "type": "string",
+          "enum": ["entity", "event", "reference", "log", "projection", "error"],
+          "description": "Table classification (Appendix C, §C.4)"
+        },
+        "description": {
+          "type": "string"
+        },
+        "fields": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/field" },
+          "minItems": 1
+        },
+        "keys": {
+          "$ref": "#/definitions/keys"
+        },
+        "constraints": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/constraint" }
+        }
+      }
+    },
+    "field": {
+      "type": "object",
+      "required": ["name", "type", "required"],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["string", "integer", "boolean", "float", "timestamp", "date", "uuid", "text", "json"],
+          "description": "Base type. Enum types use string with enum constraint"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "role": {
+          "type": "string",
+          "enum": ["id", "reference", "payload", "status", "timestamp"],
+          "description": "Optional semantic role (Appendix C, §C.2)"
+        }
+      }
+    },
+    "keys": {
+      "type": "object",
+      "required": ["primary"],
+      "properties": {
+        "primary": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1,
+          "description": "Field names forming the primary key"
+        },
+        "foreign": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/foreign_key" }
+        }
+      }
+    },
+    "foreign_key": {
+      "type": "object",
+      "required": ["field", "references_table", "references_field"],
+      "properties": {
+        "field": {
+          "type": "string",
+          "description": "Field name in this table"
+        },
+        "references_table": {
+          "type": "string",
+          "description": "Target table id"
+        },
+        "references_field": {
+          "type": "string",
+          "description": "Target field name (typically PK)"
+        }
+      }
+    },
+    "constraint": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["unique", "enum", "range", "not_null", "regex", "custom"]
+        },
+        "fields": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Fields to which this constraint applies"
+        },
+        "values": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "For enum constraint: allowed values"
+        },
+        "min": {
+          "type": "number",
+          "description": "For range constraint"
+        },
+        "max": {
+          "type": "number",
+          "description": "For range constraint"
+        },
+        "pattern": {
+          "type": "string",
+          "description": "For regex constraint"
+        },
+        "description": {
+          "type": "string",
+          "description": "For custom constraint: human-readable rule"
+        }
+      }
+    }
+  }
+}

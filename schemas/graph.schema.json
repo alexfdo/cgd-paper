@@ -1,0 +1,171 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CGD Graph v0.3",
+  "description": "Typed directed multigraph of functions and tables with contracts",
+  "type": "object",
+  "required": ["version", "nodes", "edges"],
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "0.3"
+    },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "project": { "type": "string" },
+        "created_at": { "type": "string", "format": "date-time" },
+        "specification_closure": { "type": "boolean" },
+        "contract_version": { "type": "string" }
+      }
+    },
+    "nodes": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/node" },
+      "minItems": 1
+    },
+    "edges": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/edge" }
+    },
+    "refinement_maps": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/refinement_map" }
+    }
+  },
+  "definitions": {
+    "node": {
+      "type": "object",
+      "required": ["id", "name", "type"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier of the node"
+        },
+        "name": {
+          "type": "string",
+          "description": "Human-readable name"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["function", "table"]
+        },
+        "description": {
+          "type": "string"
+        },
+        "contract": {
+          "$ref": "#/definitions/contract",
+          "description": "Only for nodes with type=function"
+        },
+        "signature_ref": {
+          "type": "string",
+          "description": "Only for nodes with type=table. References table id in tables.json"
+        },
+        "is_aggregated": {
+          "type": "boolean",
+          "default": false,
+          "description": "True if this function node has a refinement_map"
+        }
+      }
+    },
+    "edge": {
+      "type": "object",
+      "required": ["id", "source", "target", "type"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier of the edge"
+        },
+        "source": {
+          "type": "string",
+          "description": "Node id of edge source"
+        },
+        "target": {
+          "type": "string",
+          "description": "Node id of edge target"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["consumes", "produces", "reads", "writes", "triggers"]
+        }
+      }
+    },
+    "contract": {
+      "type": "object",
+      "required": ["Cin", "Cout", "R", "W", "Tin", "Tout"],
+      "properties": {
+        "Cin": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Table node ids consumed by function"
+        },
+        "Cout": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Table node ids produced by function"
+        },
+        "R": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Table node ids read by function"
+        },
+        "W": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Table node ids written by function"
+        },
+        "Tin": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Function node ids that trigger this function"
+        },
+        "Tout": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Function node ids triggered by this function"
+        }
+      }
+    },
+    "refinement_map": {
+      "type": "object",
+      "required": ["aggregated_node", "internal_functions", "internal_tables", "internal_edges", "contract_version"],
+      "properties": {
+        "aggregated_node": {
+          "type": "string",
+          "description": "Node id of the aggregated function"
+        },
+        "internal_functions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "name", "contract"],
+            "properties": {
+              "id": { "type": "string" },
+              "name": { "type": "string" },
+              "contract": { "$ref": "#/definitions/contract" }
+            }
+          }
+        },
+        "internal_tables": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "name", "signature_ref"],
+            "properties": {
+              "id": { "type": "string" },
+              "name": { "type": "string" },
+              "signature_ref": { "type": "string" }
+            }
+          }
+        },
+        "internal_edges": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/edge" }
+        },
+        "contract_version": {
+          "type": "string",
+          "description": "Contract version at the time of aggregation"
+        }
+      }
+    }
+  }
+}
