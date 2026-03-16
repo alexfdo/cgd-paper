@@ -1,0 +1,104 @@
+\subsection{Purpose}
+
+This appendix fixes a minimal formalization of the subgraph contract and the \texttt{ComputeSubgraphContract} algorithm used for decomposition, aggregation, and local verification of the structural realization.
+
+\subsection{Preconditions}
+
+Let the structural realization be given as a typed directed multigraph
+
+
+$$G = (V, E, \mathrm{src}, \mathrm{dst}, \tau_V, \tau_E),$$
+
+where $\tau_V(v) \in \{\texttt{function}, \texttt{table}\}$ and $\tau_E(e) \in \{\texttt{consumes}, \texttt{produces}, \texttt{reads}, \texttt{writes}, \texttt{triggers}\}$.
+
+Each function $f$ has a contract
+
+
+$$C(f) = \langle C_{\mathrm{in}}, C_{\mathrm{out}}, R, W, T_{\mathrm{in}}, T_{\mathrm{out}} \rangle,$$
+
+where all components are fully derived from incident edges of the corresponding type.
+
+\subsection{Subgraph contract}
+
+For a chosen subgraph $S$, the set of its vertices is denoted by $V(S)$ and decomposed into two parts:
+
+
+$$V(S) = V_{\mathrm{func}}(S) \cup V_{\mathrm{table}}(S),$$
+
+where $V_{\mathrm{func}}(S)$ is the set of vertices of type \texttt{function} belonging to $S$, and $V_{\mathrm{table}}(S)$ is the set of vertices of type \texttt{table} belonging to $S$.
+
+
+$$E(S) = \{ e \in E(G) \mid \mathrm{src}(e) \in V(S) \lor \mathrm{dst}(e) \in V(S) \}$$
+
+is the set of edges of graph $G$ for which at least one endpoint belongs to $V(S)$.
+
+For the subgraph $S$, the contract
+
+
+$$C(S) = \langle C_{\mathrm{in}}(S), C_{\mathrm{out}}(S), R(S), W(S), T_{\mathrm{in}}(S), T_{\mathrm{out}}(S) \rangle$$
+
+is defined. It describes only the external boundary of the subgraph: which tables and functions connect $S$ to the rest of the graph.
+
+\subsection{\texttt{ComputeSubgraphContract} algorithm}
+
+\begin{lstlisting}
+function ComputeSubgraphContract(S):
+    V_func(S)  = {v in V(S) : t_V(v) = function}
+    V_table(S) = {v in V(S) : t_V(v) = table}
+
+    internal_tables = {t in V_table(S) :
+        for all e in E where (src(e)=t or dst(e)=t) :
+            (src(e) in V(S) and dst(e) in V(S))}
+
+    interface_tables = V_table(S) \ internal_tables
+
+    Cin(S)  = {t in interface_tables : exists e in E(S),
+               t_E(e) = consumes,
+               src(e) = t, dst(e) in V_func(S)}
+
+    Cout(S) = {t in interface_tables : exists e in E(S),
+               t_E(e) = produces,
+               src(e) in V_func(S), dst(e) = t}
+
+    R(S)    = {t in interface_tables : exists e in E(S),
+               t_E(e) = reads,
+               src(e) = t, dst(e) in V_func(S)}
+
+    W(S)    = {t in interface_tables : exists e in E(S),
+               t_E(e) = writes,
+               src(e) in V_func(S), dst(e) = t}
+
+    Tin(S)  = {f not in V(S) : exists e in E,
+               t_E(e) = triggers,
+               src(e) = f, dst(e) in V_func(S)}
+
+    Tout(S) = {f not in V(S) : exists e in E,
+               t_E(e) = triggers,
+               src(e) in V_func(S), dst(e) = f}
+
+    return <Cin(S), Cout(S), R(S), W(S), Tin(S), Tout(S)>
+\end{lstlisting}
+
+\subsection{Note on interface tables}
+
+An interface table may belong to several components of the subgraph contract at once. For example, a table may be consumed by one boundary function and produced by another. This is a normal case: the subgraph contract fixes external relations rather than imposing a single role on a table.
+
+\subsection{Usage}
+
+\subsubsection{Decomposition}
+
+Under decomposition, the node $f$ is replaced with a subgraph $S$ such that the following holds:
+
+
+$$C(f) = C(S).$$
+
+Intermediate internal tables are allowed as long as they do not reach the boundary of the subgraph.
+
+\subsubsection{Aggregation}
+
+Under aggregation, the subgraph $S$ is collapsed into a single node $f_S$ with the contract
+
+
+$$C(f_S) = C(S).$$
+
+This makes \texttt{ComputeSubgraphContract} the minimal formal mechanism that supports contract-preserving transformations between different levels of detail of the same structural realization.

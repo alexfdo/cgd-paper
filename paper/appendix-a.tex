@@ -1,0 +1,272 @@
+\subsection{Purpose}
+
+This standard defines the format of a structured model response when designing software systems within the CGD (Controlled Generative Development) approach. The standard ensures comparability of responses across models, binary completeness checking, and the possibility of automated verification.
+
+\subsection{Principle}
+
+The standard implements contract-first at the level of communication with the model. The model receives a contract for the response format before solving the task. A violation of the format is visible without expert interpretation.
+
+\subsection{Structure of the response}
+
+The response consists of two mandatory sections. Each section begins with a second-level heading (\texttt{\#\#}) and contains exactly one fenced block. Text outside these sections is not allowed.
+
+\begin{tabular}{lll}
+\hline
+\textbf{Section} & \textbf{Format} & \textbf{Purpose} \\
+\hline
+Mermaid & \texttt{flowchart LR} & Typed directed graph: nodes and edges \\
+CGD Specification & JSON & Full system description: functions and tables \\
+\hline
+\end{tabular}
+
+\subsection{Section 1: Mermaid}
+
+\subsubsection{Format}
+
+Only \texttt{flowchart LR} is allowed. Other Mermaid diagram types (\texttt{erDiagram}, \texttt{sequenceDiagram}, \texttt{classDiagram}) are not allowed.
+
+\subsubsection{Node types}
+
+Tables are represented by trapezoids with the \texttt{tbl\_} prefix in the identifier. The display name contains the table name and its \texttt{kind} in parentheses:
+
+\begin{verbatim}
+flowchart LR
+    tbl_user[/"User (entity)"/]
+\end{verbatim}
+
+Functions are represented by rounded rectangles with the \texttt{fn\_} prefix in the identifier:
+
+\begin{verbatim}
+flowchart LR
+    fn_register_user(["RegisterUser"])
+\end{verbatim}
+
+\subsubsection{Edge types}
+
+Exactly five edge types are allowed. The type is indicated in the edge label.
+
+\begin{tabular}{lll}
+\hline
+\textbf{Type} & \textbf{Direction} & \textbf{Meaning} \\
+\hline
+consumes & table $\to$ function & the function takes a record as an input artifact \\
+produces & function $\to$ table & the function creates a new record \\
+reads & table $\to$ function & the function reads data without changing it \\
+writes & function $\to$ table & the function adds or updates a record \\
+triggers & function $\to$ function & the function invokes another function \\
+\hline
+\end{tabular}
+
+\subsubsection{Forbidden combinations}
+
+\begin{itemize}
+\item \texttt{table $\to$ table} is not allowed.
+\item \texttt{function $\to$ function} is allowed only with the \texttt{triggers} type.
+\item \texttt{triggers} may not target a table.
+\end{itemize}
+
+\subsubsection{Identifier rules}
+
+A node identifier is formed as: prefix (\texttt{tbl\_} or \texttt{fn\_}) + name in \texttt{snake\_case}. The display name is in \texttt{PascalCase}. This separation provides stable identifiers under name normalization.
+
+\subsection{Section 2: CGD Specification}
+
+\subsubsection{Format}
+
+A single JSON object with two mandatory top-level keys: \texttt{functions} and \texttt{tables}.
+
+\subsubsection{\texttt{functions} block}
+
+The key is the function name in \texttt{PascalCase}. The value is an object with the fields of the YASF profile.
+
+\paragraph{YASF profile fields for a function.}
+
+\begin{tabular}{llll}
+\hline
+\textbf{Field} & \textbf{Type} & \textbf{Required} & \textbf{Description} \\
+\hline
+\texttt{purpose} & string & yes & One sentence describing what the function does \\
+\texttt{processing} & array of string & yes & Ordered list of processing steps \\
+\texttt{input} & object & yes & Contains \texttt{consumes} and \texttt{reads} \\
+\texttt{input.consumes} & object & yes & Key: table name; value: what is consumed \\
+\texttt{input.reads} & object & yes & Key: table name; value: what is read \\
+\texttt{output} & object & yes & Contains \texttt{produces} and \texttt{writes} \\
+\texttt{output.produces} & object & yes & Key: table name; value: what is created \\
+\texttt{output.writes} & object & yes & Key: table name; value: what is written \\
+\texttt{errors} & array & yes & Array of \texttt{\{condition, result\}} objects \\
+\texttt{triggers} & array & yes & Array of \texttt{\{function, condition\}} objects \\
+\texttt{contract} & object & yes & Six-component contract $C(f)$ \\
+\hline
+\end{tabular}
+
+\paragraph{Contract $C(f)$.}
+
+\begin{tabular}{lll}
+\hline
+\textbf{Component} & \textbf{Type} & \textbf{Description} \\
+\hline
+\texttt{Cin} & array of string & Tables consumed by the function \\
+\texttt{Cout} & array of string & Tables produced by the function \\
+\texttt{R} & array of string & Tables read by the function \\
+\texttt{W} & array of string & Tables written by the function \\
+\texttt{Tin} & array of string & Functions that invoke the given function \\
+\texttt{Tout} & array of string & Functions that the given function invokes \\
+\hline
+\end{tabular}
+
+\vspace{0.5em}
+The empty set is denoted by an empty array \texttt{[]}. All contract arrays are treated as sets: element order is irrelevant and duplicates are forbidden. The contract may be given explicitly or derived from the graph. If both are present, they must match. The contract is considered closed if all six components are defined and correspond to the graph edges.
+
+\subsubsection{\texttt{tables} block}
+
+The key is the table name in \texttt{PascalCase}. The value is an object in the CGD Table Schema Profile format.
+
+\paragraph{CGD Table Schema Profile.}
+
+The profile is based on JSON Schema with CGD-specific extensions using the \texttt{x-} prefix.
+
+\paragraph{Mapping of CGD types to JSON Schema.}
+
+\begin{tabular}{llll}
+\hline
+\textbf{CGD type} & \textbf{JSON Schema type} & \textbf{Format} & \textbf{Note} \\
+\hline
+\texttt{text} & \texttt{string} & --- & \\
+\texttt{number} & \texttt{number} & --- & \texttt{integer} is a refinement \\
+\texttt{bool} & \texttt{boolean} & --- & \\
+\texttt{date} & \texttt{string} & \texttt{date-time} & \\
+\texttt{enum(values)} & \texttt{string} & --- & + \texttt{enum} field \\
+\texttt{ref(table)} & matches target PK & matches target PK & + \texttt{x-fk} field \\
+\hline
+\end{tabular}
+
+\paragraph{Standard JSON Schema fields.}
+
+\begin{tabular}{ll}
+\hline
+\textbf{Field} & \textbf{Description} \\
+\hline
+\texttt{properties} & Object describing the table fields \\
+\texttt{required} & Array of required field names \\
+\texttt{type} & Field type: \texttt{string}, \texttt{integer}, \texttt{number}, \texttt{boolean} \\
+\texttt{format} & Field format: \texttt{uuid}, \texttt{email}, \texttt{date-time}, \texttt{uri} \\
+\texttt{enum} & Array of admissible values for an enum field \\
+\hline
+\end{tabular}
+
+\paragraph{CGD extensions.}
+
+Extensions are divided into two levels.
+
+Table-level extensions (placed alongside \texttt{properties} and \texttt{required}):
+
+\begin{tabular}{lll}
+\hline
+\textbf{Field} & \textbf{Required} & \textbf{Description} \\
+\hline
+\texttt{x-kind} & yes & Table kind (see admissible values below) \\
+\texttt{x-pk} & yes & Name of the primary-key field \\
+\hline
+\end{tabular}
+
+\vspace{0.5em}
+Field-level extensions (placed inside \texttt{properties}):
+
+\begin{tabular}{lll}
+\hline
+\textbf{Field} & \textbf{Required} & \textbf{Description} \\
+\hline
+\texttt{x-fk} & no & Reference in the form \texttt{"Table.field"} \\
+\texttt{x-unique} & no & Whether the field value must be unique \\
+\hline
+\end{tabular}
+
+\paragraph{Table kinds (\texttt{x-kind}).}
+
+\begin{tabular}{ll}
+\hline
+\textbf{Kind} & \textbf{Meaning} \\
+\hline
+\texttt{entity} & Primary domain object \\
+\texttt{event} & Fact that occurred in the system \\
+\texttt{reference} & Reference data \\
+\texttt{log} & Action log \\
+\texttt{projection} & Derived or aggregated table \\
+\texttt{error} & Error description \\
+\hline
+\end{tabular}
+
+\paragraph{Enum compatibility rule.}
+
+If a producer table writes an enum field and a consumer table reads it, then the following must hold: $\mathrm{Allowed}(\mathrm{producer}) \subseteq \mathrm{Allowed}(\mathrm{consumer})$. The consumer must accept all values that the producer can create.
+
+\subsection{Naming rules}
+
+\begin{tabular}{lll}
+\hline
+\textbf{Element} & \textbf{Format} & \textbf{Examples} \\
+\hline
+Function name & \texttt{PascalCase}, verb + noun & \texttt{RegisterUser}, \texttt{SendConfirmation} \\
+Table name & \texttt{PascalCase}, singular noun & \texttt{User}, \texttt{AuditLog} \\
+Mermaid node id & \texttt{snake\_case} with prefix & \texttt{tbl\_user}, \texttt{fn\_register\_user} \\
+Table field name & \texttt{snake\_case} & \texttt{id}, \texttt{email}, \texttt{created\_at} \\
+Enum value & \texttt{snake\_case} & \texttt{active}, \texttt{pending} \\
+\hline
+\end{tabular}
+
+\subsection{Section consistency}
+
+\subsubsection{Cross-sectional consistency: Mermaid and JSON}
+
+\begin{enumerate}
+\item Every function from the \texttt{functions} block is present as an \texttt{fn\_} node in Mermaid.
+\item Every table from the \texttt{tables} block is present as a \texttt{tbl\_} node in Mermaid.
+\item There are no function nodes in Mermaid that are absent from \texttt{functions}.
+\item There are no table nodes in Mermaid that are absent from \texttt{tables}.
+\item The \texttt{kind} shown in a Mermaid table-node label matches the \texttt{x-kind} value in the \texttt{tables} block.
+\item Every \texttt{consumes(T, F)} edge in Mermaid means that $T \in C_{\mathrm{in}}(F)$.
+\item Every \texttt{produces(F, T)} edge in Mermaid means that $T \in C_{\mathrm{out}}(F)$.
+\item Every \texttt{reads(T, F)} edge in Mermaid means that $T \in R(F)$.
+\item Every \texttt{writes(F, T)} edge in Mermaid means that $T \in W(F)$.
+\item Every \texttt{triggers(F1, F2)} edge in Mermaid means that $F2 \in T_{\mathrm{out}}(F1)$ and $F1 \in T_{\mathrm{in}}(F2)$.
+\item There are no tables in contracts that are absent from the \texttt{tables} block.
+\item There are no functions in \texttt{triggers} that are absent from the \texttt{functions} block.
+\item The display name of a function in Mermaid matches the key in \texttt{functions} after name normalization.
+\item The display name of a table in Mermaid matches the key in \texttt{tables} after name normalization.
+\end{enumerate}
+
+\subsubsection{Internal consistency of CGD Specification}
+
+\begin{enumerate}
+\setcounter{enumi}{14}
+\item The set of keys in \texttt{input.consumes} matches the set \texttt{Cin} in \texttt{contract}.
+\item The set of keys in \texttt{input.reads} matches the set \texttt{R} in \texttt{contract}.
+\item The set of keys in \texttt{output.produces} matches the set \texttt{Cout} in \texttt{contract}.
+\item The set of keys in \texttt{output.writes} matches the set \texttt{W} in \texttt{contract}.
+\item The set of values in \texttt{triggers[*].function} matches the set \texttt{Tout} in \texttt{contract}.
+\end{enumerate}
+
+\subsection{Representation layers}
+
+\begin{tabular}{lll}
+\hline
+\textbf{Layer} & \textbf{Format} & \textbf{Purpose} \\
+\hline
+Model response & Mermaid + JSON & Structured output comparable across models \\
+Canonical & \texttt{graph.json} + \texttt{tables.json} & Normalized source of truth \\
+Visual & Mermaid render & Human-readable representation \\
+\hline
+\end{tabular}
+
+\vspace{0.5em}
+The model responds at the first layer. Normalization maps it into the second. Visualization turns it into the third.
+
+\subsection{Scope boundaries}
+
+The standard provides structural comparability and verifiability of responses. It does not guarantee semantic correctness---the correctness of the chosen functions, tables, and links remains the responsibility of the author or the verifier.
+
+\subsection{Versioning}
+
+Version: \texttt{v1.3}. Date: \texttt{2026-03-15}.
+
+Changes relative to v1.2: the type table was aligned with the article's formal core; \texttt{table-level} and \texttt{field-level} extensions were separated explicitly; internal JSON consistency checks were added (rules 15--19).

@@ -1,0 +1,138 @@
+\subsection{Response format}
+
+Return the result strictly in two sections. Text outside the sections is not allowed.
+
+\subsection{Section 1: Mermaid}
+
+Format: \texttt{flowchart LR}.
+
+Tables are trapezoids with the \texttt{tbl\_} prefix:
+
+\begin{verbatim}
+tbl_user[/"User (entity)"/]
+\end{verbatim}
+
+Functions are rounded rectangles with the \texttt{fn\_} prefix:
+
+\begin{verbatim}
+fn_register_user(["RegisterUser"])
+\end{verbatim}
+
+Allowed edge types (must be specified in the edge label):
+
+\begin{itemize}
+\item \texttt{consumes}: table $\to$ function
+\item \texttt{produces}: function $\to$ table
+\item \texttt{reads}: table $\to$ function
+\item \texttt{writes}: function $\to$ table
+\item \texttt{triggers}: function $\to$ function
+\end{itemize}
+
+Forbidden: \texttt{table $\to$ table}, \texttt{function $\to$ function} without \texttt{triggers}.
+
+\subsection{Section 2: JSON}
+
+A single object with two keys: \texttt{functions} and \texttt{tables}.
+
+\subsubsection{\texttt{functions}}
+
+The key is the function name (\texttt{PascalCase}, verb + noun). The value is an object:
+
+\begin{lstlisting}
+{
+  "purpose": "one sentence",
+  "processing": ["step 1", "step 2", "..."],
+  "input": {
+    "consumes": { "TableName": "short description" },
+    "reads":    { "TableName": "short description" }
+  },
+  "output": {
+    "produces": { "TableName": "short description" },
+    "writes":   { "TableName": "short description" }
+  },
+  "errors": [
+    { "condition": "condition", "result": "result" }
+  ],
+  "triggers": [
+    { "function": "FunctionName", "condition": "condition" }
+  ],
+  "contract": {
+    "Cin":  ["tables"],
+    "Cout": ["tables"],
+    "R":    ["tables"],
+    "W":    ["tables"],
+    "Tin":  ["functions"],
+    "Tout": ["functions"]
+  }
+}
+\end{lstlisting}
+
+Rules:
+
+\begin{itemize}
+\item \texttt{consumes} / \texttt{reads} / \texttt{produces} / \texttt{writes}: the value must be a short string only, not an object.
+\item \texttt{processing}: each element must describe one action on one line.
+\item \texttt{contract}: arrays are treated as sets; order is irrelevant and duplicates are forbidden.
+\item Empty fields: \texttt{\{\}} for objects, \texttt{[]} for arrays.
+\end{itemize}
+
+\subsubsection{\texttt{tables}}
+
+The key is the table name (\texttt{PascalCase}, singular). The value is an object:
+
+\begin{lstlisting}
+{
+  "x-kind": "entity | event | reference | log | projection | error",
+  "x-pk": "field_name",
+  "properties": {
+    "field_name": { "type": "type", "format": "format" }
+  },
+  "required": ["required fields"]
+}
+\end{lstlisting}
+
+Field-level extensions (inside \texttt{properties}):
+
+\begin{itemize}
+\item \texttt{"x-fk": "Table.field"} --- foreign key.
+\item \texttt{"x-unique": true} --- unique value.
+\end{itemize}
+
+\texttt{x-pk} and \texttt{x-fk} are \texttt{single-field} only.
+
+\vspace{0.5em}
+\noindent\textbf{Field types.}
+\vspace{0.5em}
+
+\begin{tabular}{lll}
+\hline
+\textbf{CGD type} & \textbf{JSON Schema type} & \textbf{Note} \\
+\hline
+\texttt{text} & \texttt{string} & \\
+\texttt{number} & \texttt{number} & \texttt{integer} is allowed \\
+\texttt{bool} & \texttt{boolean} & \\
+\texttt{date} & \texttt{string} + \texttt{format: date-time} & \\
+\texttt{enum} & \texttt{string} + \texttt{enum: [values]} & \\
+\texttt{ref} & target PK type + \texttt{x-fk} & \\
+\hline
+\end{tabular}
+
+\vspace{0.5em}
+Field names and enum values: \texttt{snake\_case}.
+
+\subsection{Section priority}
+
+If Mermaid and JSON diverge, JSON is the source of truth.
+
+\subsection{Consistency}
+
+The sections must be consistent:
+
+\begin{itemize}
+\item Every node in Mermaid = an entry in \texttt{functions} or \texttt{tables}.
+\item Every edge in Mermaid = an element of \texttt{contract}.
+\item Every element of \texttt{contract} = an edge in Mermaid.
+\item \texttt{kind} in a Mermaid table label = \texttt{x-kind} in \texttt{tables}.
+\item Keys in \texttt{consumes} / \texttt{reads} / \texttt{produces} / \texttt{writes} = the corresponding arrays in \texttt{contract}.
+\item Values in \texttt{triggers[*].function} = the \texttt{Tout} array in \texttt{contract}.
+\end{itemize}
