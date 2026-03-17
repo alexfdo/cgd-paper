@@ -1,59 +1,6 @@
-Понял. Сначала определяю новую структуру проекта на GitHub, потом переписываю README.
-
-**Новая структура репозитория `cgd-paper`:**
-
-```
-cgd-paper/
-├── README.md
-├── LICENSE
-├── paper/
-│   ├── cgd-paper.tex
-│   ├── cgd-paper.pdf
-│   ├── references.bib
-│   ├── appendix-a.tex
-│   ├── appendix-b.tex
-│   ├── appendix-c.tex
-│   ├── appendix-d.tex
-│   └── appendix-f.tex
-├── figures/
-│   ├── demo1-structured.pdf
-│   ├── demo2-no-constraint.pdf
-│   └── demo2-top-level.pdf
-├── appendices-md/
-│   ├── appendix-a-cgd-response-standard-v1.md
-│   ├── appendix-b-execution-profile-v1.md
-│   ├── appendix-c-compute-subgraph-contract.md
-│   ├── appendix-d-task-driven-context-assembly.md
-│   ├── appendix-e-demo-artifacts.md
-│   └── appendix-f-yasf-specification.md
-├── prompts/
-│   ├── scenario-01-naive.md
-│   ├── scenario-02-standard.md
-│   └── scenario-02-top-level.md
-├── runs/
-│   ├── scenario-01/
-│   │   └── claude-opus-4.6.md
-│   ├── scenario-02/
-│   │   └── gpt-5.4-thinking.md
-│   └── scenario-02-top-level/
-│       └── gpt-5.4-thinking.md
-└── drafts-ru/
-    ├── cgd-paper-ru.md
-    └── appendices-ru/
-        ├── appendix-a.md
-        ├── appendix-b.md
-        ├── appendix-c.md
-        ├── appendix-d.md
-        ├── appendix-e.md
-        └── appendix-f.md
-```
-
-**Новый README.md:**
-
-```markdown
 # CGD Paper: Controlled Generative Development
 
-**From Intent to Structural Realization and Preparation for Controlled Execution**
+**Structural Realization as a Checkable Layer Between Intent and Code**
 
 Alexander Fedorenko · Independent Researcher · 2026
 
